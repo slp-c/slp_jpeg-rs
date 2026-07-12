@@ -1,3 +1,5 @@
+use std::ops;
+
 // this thing is slow asf
 pub fn inverse_dct(dst: &mut [i16; 64], src: &[i16; 64]) {
     for y in 0..8 {
@@ -29,7 +31,10 @@ pub fn inverse_dct(dst: &mut [i16; 64], src: &[i16; 64]) {
     }
 }
 
-pub fn inverse_zigzag(dst: &mut [i16; 64], src: &[i16; 64]) {
+pub fn inverse_zigzag<T>(dst: &mut [T; 64], src: &[T; 64])
+where
+    T: Clone,
+{
     #[rustfmt::skip]
     const TRANSLATION_TABLE: [u8; 64] = [
         0,  1,  5,  6,  14, 15, 27, 28,
@@ -42,13 +47,16 @@ pub fn inverse_zigzag(dst: &mut [i16; 64], src: &[i16; 64]) {
         35, 36, 48, 49, 57, 58, 62, 63,
     ];
     for i in 0..64 {
-        dst[i] = src[TRANSLATION_TABLE[i] as usize];
+        dst[i] = src[TRANSLATION_TABLE[i] as usize].clone();
     }
 }
 
-pub fn inverse_quant(quant_table: &[i16; 64], buf: &mut [i16; 64]) {
+pub fn inverse_quant<T>(quant_table: &[T; 64], buf: &mut [T; 64])
+where
+    T: Clone + ops::MulAssign,
+{
     for i in 0..64 {
-        buf[i] *= quant_table[i];
+        buf[i] *= quant_table[i].clone();
     }
 }
 
@@ -62,5 +70,35 @@ pub fn convert_ycbcr2rgb(image: &mut [u8]) {
         pixel[0] = (y + 1.402 * (cr - 128.0)) as u8;
         pixel[1] = (y - 0.34414 * (cb - 128.0) - 0.71414 * (cr - 128.0)) as u8;
         pixel[2] = (y + 1.772 * (cb - 128.0)) as u8;
+    }
+}
+
+#[allow(unused)]
+pub fn zigzag<T>(dst: &mut [T; 64], src: &[T; 64])
+where
+    T: Clone,
+{
+    #[rustfmt::skip]
+    const TRANSLATION_TABLE: [u8; 64] = [
+        0,  1,  5,  6,  14, 15, 27, 28,
+        2,  4,  7,  13, 16, 26, 29, 42,
+        3,  8,  12, 17, 25, 30, 41, 43,
+        9,  11, 18, 24, 31, 40, 44, 53,
+        10, 19, 23, 32, 39, 45, 52, 54,
+        20, 22, 33, 38, 46, 51, 55, 60,
+        21, 34, 37, 47, 50, 56, 59, 61,
+        35, 36, 48, 49, 57, 58, 62, 63,
+    ];
+    for i in 0..64 {
+        dst[i] = src[TRANSLATION_TABLE[i] as usize].clone();
+    }
+}
+#[allow(unused)]
+pub fn quant<T>(quant_table: &[T; 64], buf: &mut [T; 64])
+where
+    T: Clone + ops::DivAssign,
+{
+    for i in 0..64 {
+        buf[i] /= quant_table[i].clone();
     }
 }
