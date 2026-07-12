@@ -210,8 +210,6 @@ impl JpegDecoder {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum JpegDecoderError {
-    InvalidInput,
-
     ReadFail(io::ErrorKind),
     NoMarker,
     MarkerInvalid,
@@ -247,9 +245,9 @@ impl From<HuffmanDecoderError> for JpegDecoderError {
     }
 }
 
-impl From<JpegDecoderError> for () {
-    fn from(_: JpegDecoderError) -> Self {
-        ()
+impl From<io::Error> for JpegDecoderError {
+    fn from(value: io::Error) -> Self {
+        Self::ReadFail(value.kind())
     }
 }
 

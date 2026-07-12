@@ -1,4 +1,7 @@
-use crate::{algorithm::convert_ycbcr2rgb, read::JpegDecoder};
+use crate::{
+    algorithm::convert_ycbcr2rgb,
+    read::{JpegDecoder, JpegDecoderError},
+};
 
 pub(crate) mod algorithm;
 pub mod read;
@@ -20,8 +23,8 @@ pub(crate) const SOS: u8 = 0xDA;
 pub(crate) const EOI: u8 = 0xD9;
 
 impl Image {
-    pub fn read_jpeg_from_file(path: &str) -> Result<Image, ()> {
-        let jpeg_file = std::fs::read(path).map_err(|_| ())?;
+    pub fn read_jpeg_from_file(path: &str) -> Result<Image, JpegDecoderError> {
+        let jpeg_file = std::fs::read(path)?;
         let mut reader = std::io::Cursor::new(jpeg_file.as_slice());
 
         let mut image = Image::default();
