@@ -1,0 +1,6 @@
+/target
+/Cargo.lock
+/img
+/*.jpg
+/*.png
+/read_bak.txt
