@@ -28,6 +28,8 @@ pub struct JpegDecoderState {
 
     h: u8,
     v: u8,
+
+    strm_end: bool,
 }
 
 impl JpegDecoder {
@@ -49,11 +51,18 @@ impl JpegDecoder {
         &mut self,
         reader: &mut R,
     ) -> Result<Option<Block<i16>>, JpegDecoderError> {
-        let (mcu, component, v, h) = match self.update_state(reader) {
-            Ok(Some(x)) => x,            // ok we got something
-            Ok(None) => return Ok(None), // ok but we got nothing to update, we should end here
-            Err(e) => return Err(e),     // error
-        };
+        /*
+        this function will return Err() on actuall Error
+        return Ok(None) when there's no other block to decode next
+        return Ok(Some(block)) when there's still some blocks to decode
+
+        this function is stateful
+        */
+        if self.state.strm_end {
+            return Ok(None);
+        }
+
+        let (mcu, component, v, h) = self.update_state(reader)?;
 
         let mut block = Block::<i16> {
             data: [0; 64],
@@ -80,8 +89,13 @@ impl JpegDecoder {
     fn update_state<R: io::Read + io::Seek>(
         &mut self,
         reader: &mut R,
-    ) -> Result<Option<(usize, u8, u8, u8)>, JpegDecoderError> {
+    ) -> Result<(usize, u8, u8, u8), JpegDecoderError> {
+        if self.state.strm_end {
+            return Err(JpegDecoderError::StateError);
+        }
+
         let (mcu, comp, v, h) = (self.state.mcu, self.state.comp, self.state.v, self.state.h);
+        // capture the current state
 
         let ComponentTable {
             horizontal_sampling_factor,
@@ -89,6 +103,7 @@ impl JpegDecoder {
             ..
         } = self.parser.component_table[comp as usize];
 
+        // try to update
         self.state.h += 1;
         if self.state.h >= horizontal_sampling_factor {
             self.state.h = 0;
@@ -106,7 +121,7 @@ impl JpegDecoder {
                         // parse will also reset our state
                         match self.parse(reader, &mut None) {
                             Ok(Some(())) => {}
-                            Ok(None) => return Ok(None),
+                            Ok(None) => self.state.strm_end = true, // no more update available so we set strm_end here
                             Err(e) => return Err(e),
                         }
                     }
@@ -114,7 +129,7 @@ impl JpegDecoder {
             }
         }
 
-        Ok(Some((mcu, comp, v, h)))
+        Ok((mcu, comp, v, h))
     }
 
     fn parse<R: io::Read + io::Seek>(
