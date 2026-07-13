@@ -175,7 +175,7 @@ where
 impl JpegDecoder {
     // write an 8x8 block
     // this will clamp(0, 255) Block's data
-    pub fn write_block<T>(&self, block: &Block<T>, image: &mut Image)
+    pub fn write_block<T>(&self, image: &mut Image, block: &Block<T>)
     where
         T: Clone + Copy + From<u8> + cmp::Ord + TryInto<u8>,
     {
