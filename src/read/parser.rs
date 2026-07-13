@@ -469,6 +469,7 @@ impl JpegParser {
                 min_comp: comp,
                 h: 0,
                 v: 0,
+                ..*state
             };
         } else {
             if *state != JpegDecoderState::default() {
@@ -498,6 +499,7 @@ impl JpegParser {
                 min_comp: 0,
                 h: 0,
                 v: 0,
+                ..*state
             };
         }
 
