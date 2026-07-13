@@ -1,9 +1,6 @@
-use crate::{
-    algorithm::convert_ycbcr2rgb,
-    read::{JpegDecoder, JpegDecoderError},
-};
+use crate::read::{JpegDecoder, JpegDecoderError};
 
-pub(crate) mod algorithm;
+pub mod algorithm;
 pub mod read;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -37,15 +34,22 @@ impl Image {
                         .div_ceil(8) // this is redundant for baseline jpeg but it's just a universal way to do it so we keep it anyway
             ];
 
+        /*
+        decode_next_block will do Huffman + RLE decoding, it will return Err on error and Ok() on success
+        if return Ok() it'll be Ok(Some(block)) if there's still some block to decode
+        and return Ok(None) if there's no more to decode
+        it was design to use with the while let as you see below
+        */
+
         let mut temp: [i16; 64] = [0; 64];
         while let Some(mut block) = decoder.decode_next_block(&mut reader)? {
             algorithm::inverse_quant(decoder.get_quant_table(block.component), &mut block.data);
             algorithm::inverse_zigzag(&mut temp, &block.data);
-            algorithm::inverse_dct(&mut block.data, &temp);
-            decoder.write_block(&block, &mut image);
+            algorithm::inverse_dct(&mut block.data, &temp); // inverse_dct already do the +128 one
+            decoder.write_block(&block, &mut image); // the decoder know exactly where to write that block with no conflicts
         }
 
-        convert_ycbcr2rgb(&mut image.pixels);
+        algorithm::convert_ycbcr2rgb(&mut image.pixels);
 
         Ok(image)
     }
