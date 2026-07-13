@@ -31,10 +31,10 @@ impl Image {
         let mut decoder = JpegDecoder::init(&mut reader, &mut image)?;
 
         image.pixels = vec![
-                0; // the formula is height * bytes_per_row. Some might refer bytes_per_row as row_strides
+                0; // the formula is height * bytes_per_row. Some might refer bytes_per_row as row_strides or pitch
                 image.height as usize
                     * (image.width as usize * image.channels as usize * image.bit_depth as usize)
-                        .div_ceil(8) // this is redundant but it's just a universal way to do it so we keep it anyway
+                        .div_ceil(8) // this is redundant for baseline jpeg but it's just a universal way to do it so we keep it anyway
             ];
 
         let mut temp: [i16; 64] = [0; 64];
