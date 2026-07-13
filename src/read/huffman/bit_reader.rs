@@ -1,5 +1,7 @@
 use std::io;
 
+use crate::EOI;
+
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct BitReader {
     pub buf: u16,
@@ -83,9 +85,21 @@ impl BitReader {
 
     // we probably don't wanna call the reader directly
     fn read<R: io::Read>(&mut self, reader: &mut R, buf: &mut [u8]) -> Result<(), BitReaderError> {
-        reader
+        match reader
             .read_exact(buf)
             .map_err(|e| BitReaderError::ReadFail(e.kind()))
+        {
+            Ok(_) => Ok(()),
+            Err(BitReaderError::ReadFail(io::ErrorKind::UnexpectedEof)) => {
+                if buf.len() > 0 {
+                    buf[0] = EOI;
+                    Ok(())
+                } else {
+                    Err(BitReaderError::ReadFail(io::ErrorKind::UnexpectedEof))
+                }
+            }
+            el => el,
+        }
     }
 
     fn seek<R: io::Read + io::Seek>(

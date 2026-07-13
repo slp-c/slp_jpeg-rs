@@ -528,9 +528,21 @@ impl JpegParser {
         reader: &mut T,
         buf: &mut [u8],
     ) -> Result<(), ParserError> {
-        reader
+        match reader
             .read_exact(buf)
             .map_err(|e| ParserError::ReadFail(e.kind()))
+        {
+            Ok(_) => Ok(()),
+            Err(ParserError::ReadFail(io::ErrorKind::UnexpectedEof)) => {
+                if buf.len() == 1 {
+                    buf[0] = EOI;
+                    Ok(())
+                } else {
+                    Err(ParserError::ReadFail(io::ErrorKind::UnexpectedEof))
+                }
+            }
+            el => el,
+        }
     }
 
     fn seek<T: io::Read + io::Seek>(
