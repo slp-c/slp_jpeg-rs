@@ -33,7 +33,8 @@ fn main() -> Result<(), Error> {
         height: image.height as usize,
         format: turbojpeg::PixelFormat::RGB,
     };
-    turbojpeg::compress(image, 100, turbojpeg::Subsamp::Sub4x1).unwrap();
+    let jpeg_data = turbojpeg::compress(image, 100, turbojpeg::Subsamp::Sub4x1).unwrap();
+    std::fs::write("output.jpg", &jpeg_data).unwrap();
 
     Ok(())
 }
