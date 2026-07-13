@@ -35,7 +35,7 @@ impl Image {
             ];
 
         /*
-        decode_next_block will do Huffman + RLE decoding, it will return Err on error and Ok() on success
+        decode_next_block will do Huffman + RLE decoding, it will return Err() on error and Ok() on success
         if return Ok() it'll be Ok(Some(block)) if there's still some block to decode
         and return Ok(None) if there's no more to decode
         it was design to use with the while let as you see below
@@ -46,7 +46,7 @@ impl Image {
             algorithm::inverse_quant(decoder.get_quant_table(block.component), &mut block.data);
             algorithm::inverse_zigzag(&mut temp, &block.data);
             algorithm::inverse_dct(&mut block.data, &temp); // inverse_dct already do the +128 one
-            decoder.write_block(&block, &mut image); // the decoder know exactly where to write that block with no conflicts
+            decoder.write_block(&mut image, &block); // the decoder know exactly where to write that block with no conflicts
         }
 
         algorithm::convert_ycbcr2rgb(&mut image.pixels);
