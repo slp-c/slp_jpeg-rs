@@ -24,7 +24,7 @@ pub fn inverse_dct(dst: &mut [i16; 64], src: &[i16; 64]) {
                     }
                     sum
                 } / 4.0);
-                let dst = unsafe { dst.to_int_unchecked::<i16>() } + 128;
+                let dst = unsafe { dst.to_int_unchecked::<i16>() };
                 dst
             };
         }

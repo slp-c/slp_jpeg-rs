@@ -45,7 +45,8 @@ impl Image {
         while let Some(mut block) = decoder.decode_next_block(&mut reader)? {
             algorithm::inverse_quant(decoder.get_quant_table(block.component), &mut block.data);
             algorithm::inverse_zigzag(&mut temp, &block.data);
-            algorithm::inverse_dct(&mut block.data, &temp); // inverse_dct already do the +128 one
+            algorithm::inverse_dct(&mut block.data, &temp);
+            block.data.iter_mut().for_each(|x| *x += 128);
             decoder.write_block(&mut image, &block); // the decoder know exactly where to write that block with no conflicts
         }
 
