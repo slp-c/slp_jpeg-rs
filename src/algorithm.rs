@@ -73,7 +73,6 @@ pub fn convert_ycbcr2rgb(image: &mut [u8]) {
     }
 }
 
-#[allow(unused)]
 pub fn zigzag<T>(dst: &mut [T; 64], src: &[T; 64])
 where
     T: Clone,
@@ -93,7 +92,7 @@ where
         dst[i] = src[TRANSLATION_TABLE[i] as usize].clone();
     }
 }
-#[allow(unused)]
+
 pub fn quant<T>(quant_table: &[T; 64], buf: &mut [T; 64])
 where
     T: Clone + ops::DivAssign,
