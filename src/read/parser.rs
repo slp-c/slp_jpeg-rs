@@ -4,10 +4,10 @@ use crate::{DHT, DQT, EOI, Image, SOF0, SOI, SOS, read::JpegDecoderState};
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct JpegParser {
-    pub(crate) check_list: CheckList,
+    check_list: CheckList,
 
     quant_table: [Vec<i16>; 4],
-    pub component_table: [ComponentTable; 3],
+    component_table: [ComponentTable; 3],
     huffman_table: [[Vec<HuffmanSymbol>; 2]; 2],
 
     pub mcu: Mcu,
@@ -67,6 +67,10 @@ impl JpegParser {
         );
 
         [huffman_table_dc, huffman_table_ac]
+    }
+
+    pub fn get_component_table(&self, component: u8) -> ComponentTable {
+        self.component_table[component as usize]
     }
 
     pub fn get_marker<T: io::Read + io::Seek>(

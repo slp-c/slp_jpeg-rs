@@ -1,7 +1,7 @@
 use std::{cmp, io};
 
 use crate::{
-    EOI, Image, SOS,
+    Block, EOI, Image, SOS,
     read::{
         huffman::{HuffmanDecoder, HuffmanDecoderError},
         parser::{ComponentTable, JpegParser, ParserError},
@@ -86,6 +86,10 @@ impl JpegDecoder {
         self.parser.get_quant_table(component)
     }
 
+    pub fn get_component_table(&self, component: u8) -> ComponentTable {
+        self.parser.get_component_table(component)
+    }
+
     fn update_state<R: io::Read + io::Seek>(
         &mut self,
         reader: &mut R,
@@ -101,7 +105,7 @@ impl JpegDecoder {
             horizontal_sampling_factor,
             vertical_sampling_factor,
             ..
-        } = self.parser.component_table[comp as usize];
+        } = self.get_component_table(comp);
 
         // try to update
         self.state.h += 1;
@@ -160,18 +164,6 @@ impl JpegDecoder {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Block<T>
-where
-    T: Clone + Copy + From<u8>,
-{
-    pub data: [T; 64],
-    pub mcu: usize,
-    pub component: u8, // 0, 1, 2
-    pub v: u8,
-    pub h: u8,
-}
-
 impl JpegDecoder {
     // write an 8x8 block
     // this will clamp(0, 255) Block's data
@@ -190,8 +182,8 @@ impl JpegDecoder {
         // (1, 1) | Y
         // (2, 2) | Cb
         // (2, 2) | Cr
-        let i_factor = self.parser.component_table[component].i_factor;
-        let j_factor = self.parser.component_table[component].j_factor;
+        let i_factor = self.get_component_table(component as u8).i_factor;
+        let j_factor = self.get_component_table(component as u8).j_factor;
 
         let row = (p / self.parser.mcu.mcu_per_row) * self.parser.mcu.mcu_height
             + (block.v as usize) * 8 * i_factor;
