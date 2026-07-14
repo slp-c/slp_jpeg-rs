@@ -90,6 +90,10 @@ impl JpegDecoder {
         self.parser.get_component_table(component)
     }
 
+    pub fn get_prime_component(&self) -> u8 {
+        self.parser.prime_component
+    }
+
     fn update_state<R: io::Read + io::Seek>(
         &mut self,
         reader: &mut R,
