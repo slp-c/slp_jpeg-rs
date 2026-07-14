@@ -11,6 +11,7 @@ pub struct JpegParser {
     huffman_table: [[Vec<HuffmanSymbol>; 2]; 2],
 
     pub mcu: Mcu,
+    pub prime_component: u8,
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -356,6 +357,7 @@ impl JpegParser {
         let mut v: Vec<usize> = vec![0; image.channels as usize];
         let mut h: Vec<usize> = vec![0; image.channels as usize];
 
+        self.prime_component = 0;
         for i in 0..image.channels as usize {
             let mut buf: [u8; 3] = [0; 3];
             self.read(reader, &mut buf)?;
@@ -380,10 +382,14 @@ impl JpegParser {
 
             h[i] = self.component_table[i].horizontal_sampling_factor as usize;
             v[i] = self.component_table[i].vertical_sampling_factor as usize;
+
+            if h[i] > h[self.prime_component as usize] {
+                self.prime_component = i as u8;
+            }
         }
 
-        let vmax = *v.iter().max().unwrap();
-        let hmax = *h.iter().max().unwrap();
+        let vmax = v[self.prime_component as usize];
+        let hmax = h[self.prime_component as usize];
 
         if vmax == 0 || hmax == 0 {
             return Err(ParserError::MarkerInvalid);
@@ -591,6 +597,7 @@ impl Default for JpegParser {
             component_table: [ComponentTable::default(); 3],
             huffman_table: [[Vec::new(), Vec::new()], [Vec::new(), Vec::new()]],
             mcu: Mcu::default(),
+            prime_component: 0,
         }
     }
 }
