@@ -22,8 +22,8 @@ pub(crate) const EOI: u8 = 0xD9;
 
 impl Image {
     pub fn read_jpeg_from_file(path: &str) -> Result<Image, JpegDecoderError> {
-        let jpeg_file = std::fs::read(path)?;
-        let mut reader = std::io::Cursor::new(jpeg_file.as_slice());
+        let jpeg_file = std::fs::File::open(path)?;
+        let mut reader = std::io::BufReader::new(jpeg_file);
 
         let mut image = Image::default();
         let mut decoder = JpegDecoder::init(&mut reader, &mut image)?;
@@ -47,11 +47,12 @@ impl Image {
         while let Some(mut block) = decoder.decode_next_block(&mut reader)? {
             algorithm::inverse_quant(decoder.get_quant_table(block.component), &mut block.data);
             algorithm::inverse_zigzag(&mut temp, &block.data);
-            algorithm::inverse_dct(&mut block.data, &temp);
+            algorithm::inverse_discrete_cosine_transform(&mut block.data, &temp);
             block.data.iter_mut().for_each(|x| *x += 128);
             decoder.write_block(&mut image, &block);
             // Developers should be able to define write_block by themselves if they want
             // See struct Block in this same file
+            // This current write_block can write no conflicts
         }
         algorithm::convert_ycbcr2rgb(&mut image.pixels);
 
