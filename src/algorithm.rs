@@ -1,62 +1,3 @@
-// this thing is slow asf
-pub fn inverse_dct(dst: &mut [i16; 64], src: &[i16; 64]) {
-    for y in 0..8 {
-        for x in 0..8 {
-            dst[y * 8 + x] = {
-                let dst = ({
-                    let mut sum: f32 = 0.0;
-                    for v in 0..8 {
-                        for u in 0..8 {
-                            let (x, y, u, v) = (x as f32, y as f32, u as f32, v as f32);
-                            let mut temp: f32 = src[v as usize * 8 + u as usize] as f32
-                                * f32::cos((2.0 * x + 1.0) * u * std::f32::consts::PI / 16.0)
-                                * f32::cos((2.0 * y + 1.0) * v * std::f32::consts::PI / 16.0);
-                            if u as usize == 0 {
-                                temp /= f32::sqrt(2.0);
-                            }
-                            if v as usize == 0 {
-                                temp /= f32::sqrt(2.0);
-                            }
-                            sum += temp;
-                        }
-                    }
-                    sum
-                } / 4.0);
-                let dst = unsafe { dst.to_int_unchecked::<i16>() };
-                dst
-            };
-        }
-    }
-}
-pub fn dct(dst: &mut [i16; 64], src: &[i16; 64]) {
-    for y in 0..8 {
-        for x in 0..8 {
-            dst[y * 8 + x] = {
-                let mut dst = ({
-                    let mut sum: f32 = 0.0;
-                    for v in 0..8 {
-                        for u in 0..8 {
-                            let (x, y, u, v) = (x as f32, y as f32, u as f32, v as f32);
-                            sum += src[v as usize * 8 + u as usize] as f32
-                                * f32::cos((2.0 * u + 1.0) * x * std::f32::consts::PI / 16.0)
-                                * f32::cos((2.0 * v + 1.0) * y * std::f32::consts::PI / 16.0);
-                        }
-                    }
-                    sum
-                } / 4.0);
-                if x == 0 {
-                    dst /= f32::sqrt(2.0);
-                }
-                if y == 0 {
-                    dst /= f32::sqrt(2.0);
-                }
-                let dst = unsafe { dst.to_int_unchecked::<i16>() };
-                dst
-            };
-        }
-    }
-}
-
 pub fn inverse_zigzag<T>(dst: &mut [T; 64], src: &[T; 64])
 where
     T: Clone,
@@ -313,4 +254,93 @@ pub fn subsampling(src: &[u8], i_factor: usize, j_factor: usize, width: usize) -
     }
 
     return dst;
+}
+
+pub fn inverse_discrete_cosine_transform(dst: &mut [i16; 64], src: &[i16; 64]) {
+    type T = i64;
+    const SHIFT: u32 = 16;
+
+    /*
+    ```Python
+    import numpy as np
+
+    shift = 16
+    scale = 1 << shift
+    table = np.zeros((8, 8), dtype=int)
+
+    for i in range(8):
+        for u in range(8):
+            r = np.cos(((2.0 * i + 1.0) * u * np.pi) / 16.0)
+            if u == 0:
+                r /= np.sqrt(2.0)
+            table[i, u] = int(round(r * scale))
+
+    print("const COS_TABLE: [[i32; 8]; 8] = [")
+    for row in table:
+        print(f"    [{', '.join(map(str, row))}],")
+    print("];")
+    ```
+    */
+    const COS_TABLE: [[i32; 8]; 8] = [
+        [46341, 64277, 60547, 54491, 46341, 36410, 25080, 12785],
+        [46341, 54491, 25080, -12785, -46341, -64277, -60547, -36410],
+        [46341, 36410, -25080, -64277, -46341, 12785, 60547, 54491],
+        [46341, 12785, -60547, -36410, 46341, 54491, -25080, -64277],
+        [46341, -12785, -60547, 36410, 46341, -54491, -25080, 64277],
+        [46341, -36410, -25080, 64277, -46341, -12785, 60547, -54491],
+        [46341, -54491, 25080, 12785, -46341, 64277, -60547, 36410],
+        [46341, -64277, 60547, -54491, 46341, -36410, 25080, -12785],
+    ];
+
+    let mut temp: [T; 64] = [0; 64];
+    for i in 0..8 {
+        for j in 0..8 {
+            let mut sum: i64 = 0;
+            for u in 0..8 {
+                sum += src[i * 8 + u] as i64 * COS_TABLE[j][u] as i64;
+            }
+            sum /= 2;
+            temp[i * 8 + j] = sum as T;
+        }
+    }
+
+    for j in 0..8 {
+        for i in 0..8 {
+            let mut sum: i64 = 0;
+            for v in 0..8 {
+                sum += temp[v * 8 + j] as i64 * COS_TABLE[i][v] as i64;
+            }
+            sum /= 2;
+            dst[i * 8 + j] = (sum >> (SHIFT + SHIFT)) as i16;
+        }
+    }
+}
+
+pub fn discrete_cosine_transform(dst: &mut [i16; 64], src: &[i16; 64]) {
+    for y in 0..8 {
+        for x in 0..8 {
+            dst[y * 8 + x] = {
+                let mut dst = ({
+                    let mut sum: f32 = 0.0;
+                    for v in 0..8 {
+                        for u in 0..8 {
+                            let (x, y, u, v) = (x as f32, y as f32, u as f32, v as f32);
+                            sum += src[v as usize * 8 + u as usize] as f32
+                                * f32::cos((2.0 * u + 1.0) * x * std::f32::consts::PI / 16.0)
+                                * f32::cos((2.0 * v + 1.0) * y * std::f32::consts::PI / 16.0);
+                        }
+                    }
+                    sum
+                } / 4.0);
+                if x == 0 {
+                    dst /= f32::sqrt(2.0);
+                }
+                if y == 0 {
+                    dst /= f32::sqrt(2.0);
+                }
+                let dst = unsafe { dst.to_int_unchecked::<i16>() };
+                dst
+            };
+        }
+    }
 }
