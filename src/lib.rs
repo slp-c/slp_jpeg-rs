@@ -54,7 +54,10 @@ impl Image {
             // See struct Block in this same file
             // This current write_block can write no conflicts
         }
-        algorithm::convert_ycbcr2rgb(&mut image.pixels);
+
+        if image.channels == 3 {
+            algorithm::convert_ycbcr2rgb(&mut image.pixels);
+        }
 
         Ok(image)
     }
