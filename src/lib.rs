@@ -37,7 +37,7 @@ impl Image {
             ];
 
         /*
-        decode_next_block will do Huffman + RLE decoding, it will return Err() on error and Ok() on success
+        decoder.decode_next_block will do Huffman + RLE decoding, it will return Err() on error and Ok() on success
         if return Ok() it'll be Ok(Some(block)) if there's still some block to decode
         and return Ok(None) if there's no more to decode
         it was design to use with the while let as you see below
@@ -50,7 +50,7 @@ impl Image {
             algorithm::inverse_dct(&mut block.data, &temp);
             block.data.iter_mut().for_each(|x| *x += 128);
             decoder.write_block(&mut image, &block);
-            // developers should be able to define write_block by themselves if they want
+            // Developers should be able to define write_block by themselves if they want
             // See struct Block in this same file
         }
         algorithm::convert_ycbcr2rgb(&mut image.pixels);
@@ -77,6 +77,10 @@ where
     the prime_component (decoder.get_prime_component()).
 
     The prime_component is the one decoder choose so other component will scale into it
+    But of course you can choose otherwise,
+    developers can define there own write_block function.
+    You can read our write_block function in read.rs to see
+    how we calculate the block position to write.
 
     component will tell you each component this block have.
     we define:
@@ -99,6 +103,6 @@ where
     So in order to write we need to know, which mcu are we writting,
     then which block in that mcu we're writting
     For component that have less/equal/greater sampling factor
-    than/as/than prime component we sacle/keep/scale the block size up//down
+    than/as/than prime component we sacle/keep/scale the block size up//down.
     */
 }
