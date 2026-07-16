@@ -1,6 +1,6 @@
 use std::time::Instant;
 
-use slp_jpeg_rs::{Image, read::JpegDecoderError};
+use slp_jpeg_rs::{Image, read::JpegDecoderError, read_jpeg_from_file_fast};
 
 #[allow(unused)]
 #[derive(Debug)]
@@ -8,13 +8,13 @@ enum Error {
     ImageRead(JpegDecoderError),
 }
 
-const INPUT_FILE: &'static str = "/home/rei/Projects/Rust/slp_jpeg-rs/input.jpg";
+const INPUT_FILE: &'static str = "/home/rei/Projects/Rust/slp_jpeg-rs/input_.jpg";
 
 #[test]
 fn main() -> Result<(), Error> {
     let start = Instant::now();
 
-    let image: Image = Image::read_jpeg_from_file(INPUT_FILE).map_err(|e| Error::ImageRead(e))?;
+    let image: Image = read_jpeg_from_file_fast(INPUT_FILE).map_err(|e| Error::ImageRead(e))?;
 
     println!("total: {}", start.elapsed().as_secs_f64());
 
