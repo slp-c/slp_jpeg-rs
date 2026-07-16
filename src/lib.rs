@@ -1,4 +1,5 @@
 use std::{
+    collections::VecDeque,
     sync::{Arc, mpsc},
     thread,
     time::Instant,
@@ -71,7 +72,6 @@ pub fn read_jpeg_from_file(path: &str) -> Result<Image, JpegDecoderError> {
     Ok(image)
 }
 
-#[repr(align(64))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct Block {
     pub data: [i16; 64],
@@ -158,54 +158,86 @@ pub fn read_jpeg_from_file_fast(path: &str) -> Result<Image, JpegDecoderError> {
             prime_component: decoder.get_prime_component() as usize,
         });
 
+        let blocks_per_row = (image.width as usize).div_ceil(
+            8 * decoder
+                .get_component_table(decoder.get_prime_component())
+                .horizontal_sampling_factor as usize,
+        );
+
         let mut senders = Vec::new();
+        let mut handler = VecDeque::new();
 
-        // somehow this is the only value that run faster
-        const WORKER_COUNT: usize = 2;
-        const CHANNEL: usize = 128 / WORKER_COUNT;
+        let worker_count: usize = match thread::available_parallelism() {
+            Err(_) => 1,
+            Ok(v) => v.get(),
+        };
 
-        for _ in 0..WORKER_COUNT {
-            let (tx, rx) = mpsc::sync_channel::<Block>(CHANNEL);
+        for _ in 0..worker_count {
+            let (tx, rx) = mpsc::channel::<VecDeque<Block>>();
             senders.push(tx);
 
             let args = args.clone();
-            thread::spawn(move || {
-                let (ty, ry) = mpsc::sync_channel::<Block>(CHANNEL);
-                {
+            handler.push_back(thread::spawn(move || {
+                let (ty, ry) = mpsc::channel::<Block>();
+
+                let handler = {
                     let args = args.clone();
                     thread::spawn(move || {
                         while let Ok(block) = ry.recv() {
                             write_block(&args, &block);
                         }
-                    });
-                }
+                    })
+                };
 
-                while let Ok(mut block) = rx.recv() {
-                    let quant_table: &[i16; 64] = &args.quant_table
-                        [args.component_table[block.component as usize].quant_id as usize]
-                        [0..64]
-                        .try_into()
-                        .unwrap();
-                    let mut temp: [i16; 64] = [0; 64];
+                let mut temp: [i16; 64] = [0; 64];
+                while let Ok(mut blocks) = rx.recv() {
+                    while let Some(mut block) = blocks.pop_front() {
+                        let quant_table: &[i16; 64] = &args.quant_table
+                            [args.component_table[block.component as usize].quant_id as usize]
+                            [0..64]
+                            .try_into()
+                            .unwrap();
 
-                    algorithm::inverse_quant(quant_table, &mut block.data);
-                    algorithm::inverse_zigzag(&mut temp, &block.data);
-                    algorithm::inverse_discrete_cosine_transform(&mut block.data, &temp);
-                    block.data.iter_mut().for_each(|x| *x += 128);
+                        algorithm::inverse_quant(quant_table, &mut block.data);
+                        algorithm::inverse_zigzag(&mut temp, &block.data);
+                        algorithm::inverse_discrete_cosine_transform(&mut block.data, &temp);
+                        block.data.iter_mut().for_each(|x| *x += 128);
 
-                    if ty.send(block).is_err() {
-                        break;
+                        ty.send(block).unwrap();
                     }
                 }
-            });
+
+                drop(ty);
+                handler.join().unwrap();
+            }));
         }
 
-        // 0.07
+        let mut cur_worker = 0;
+        let mut blocks: VecDeque<Block> = VecDeque::new();
+
         while let Some(block) = decoder.decode_next_block(&mut reader)? {
-            if senders[(block.mcu as usize) % WORKER_COUNT]
-                .send(block)
-                .is_err()
-            {
+            if block.mcu % blocks_per_row == 0 {
+                if senders[cur_worker].send(blocks.clone()).is_err() {
+                    return Err(JpegDecoderError::StateError);
+                }
+                blocks.clear();
+                cur_worker += 1;
+                cur_worker %= worker_count;
+            }
+
+            blocks.push_back(block);
+        }
+
+        if !blocks.is_empty() {
+            if senders[cur_worker].send(blocks.clone()).is_err() {
+                return Err(JpegDecoderError::StateError);
+            }
+            blocks.clear();
+        }
+
+        drop(senders);
+        while let Some(v) = handler.pop_front() {
+            if v.join().is_err() {
                 return Err(JpegDecoderError::StateError);
             }
         }
@@ -250,10 +282,10 @@ fn write_block(arg: &ProcessBlockArgs, block: &Block) {
     let block_width =
         8 * arg.component_table[arg.prime_component].horizontal_sampling_factor as usize;
 
-    let block_per_row = (arg.width as usize).div_ceil(block_width);
+    let blocks_per_row = (arg.width as usize).div_ceil(block_width);
 
-    let row = (p / block_per_row) * block_height + (block.v as usize) * 8 * i_factor;
-    let col = (p % block_per_row) * block_width + (block.h as usize) * 8 * j_factor;
+    let row = (p / blocks_per_row) * block_height + (block.v as usize) * 8 * i_factor;
+    let col = (p % blocks_per_row) * block_width + (block.h as usize) * 8 * j_factor;
 
     let mut i: usize = 0;
     while i < 8 * i_factor && row + i < arg.height as usize {
