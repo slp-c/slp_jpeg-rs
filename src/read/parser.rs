@@ -52,16 +52,19 @@ pub struct CheckList {
 }
 
 impl JpegParser {
+    #[inline(always)]
     pub fn clone_quant_table(&self) -> [Vec<i16>; 4] {
         self.quant_table.clone()
     }
 
+    #[inline(always)]
     pub fn get_quant_table(&self, component: u8) -> &[i16; 64] {
         self.quant_table[self.component_table[component as usize].quant_id as usize][0..64]
             .try_into()
             .unwrap()
     }
 
+    #[inline(always)]
     pub fn get_huffman_table(&self, component: u8) -> [&[HuffmanSymbol; 65536]; 2] {
         let huffman_id = self.component_table[component as usize].huffman_id;
 
@@ -74,10 +77,12 @@ impl JpegParser {
         [huffman_table_dc, huffman_table_ac]
     }
 
+    #[inline(always)]
     pub fn clone_component_table(&self) -> [ComponentTable; 3] {
         self.component_table.clone()
     }
 
+    #[inline(always)]
     pub fn get_component_table(&self, component: u8) -> ComponentTable {
         self.component_table[component as usize]
     }

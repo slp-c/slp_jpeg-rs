@@ -1,3 +1,4 @@
+#[inline(always)]
 pub fn inverse_zigzag<T>(dst: &mut [T; 64], src: &[T; 64])
 where
     T: Clone,
@@ -17,6 +18,7 @@ where
         dst[i] = src[TRANSLATION_TABLE[i] as usize].clone();
     }
 }
+#[inline(always)]
 pub fn zigzag<T>(dst: &mut [T; 64], src: &[T; 64])
 where
     T: Clone,
@@ -37,6 +39,7 @@ where
     }
 }
 
+#[inline(always)]
 pub fn inverse_quant<T>(quant_table: &[T; 64], buf: &mut [T; 64])
 where
     T: Clone + std::ops::MulAssign,
@@ -45,6 +48,7 @@ where
         buf[i] *= quant_table[i].clone();
     }
 }
+#[inline(always)]
 pub fn quant<T>(quant_table: &[T; 64], buf: &mut [T; 64])
 where
     T: Clone + std::ops::DivAssign,
@@ -54,6 +58,7 @@ where
     }
 }
 
+#[inline(always)]
 pub fn convert_ycbcr2rgb(image: &mut [u8]) {
     type T = i32;
     const SHIFT: usize = size_of::<T>() * 8 / 2;
@@ -92,6 +97,7 @@ pub fn convert_ycbcr2rgb(image: &mut [u8]) {
         };
     }
 }
+#[inline(always)]
 pub fn extract_ycbcr2rgb(image: &[u8], r: &mut [u8], g: &mut [u8], b: &mut [u8]) {
     /*
     assume r, g, b have the same len and panic if not
@@ -138,6 +144,7 @@ pub fn extract_ycbcr2rgb(image: &[u8], r: &mut [u8], g: &mut [u8], b: &mut [u8])
         *b = ((A[2][0] * y + A[2][1] * cb + A[2][2] * cr) >> SHIFT).clamp(0, 255) as u8;
     }
 }
+#[inline(always)]
 pub fn convert_rgb2ycbcr(image: &mut [u8]) {
     type T = i32;
     const SHIFT: usize = size_of::<T>() * 8 / 2;
@@ -176,6 +183,7 @@ pub fn convert_rgb2ycbcr(image: &mut [u8]) {
         };
     }
 }
+#[inline(always)]
 pub fn extract_rgb2ycbcr(image: &[u8], y: &mut [u8], cb: &mut [u8], cr: &mut [u8]) {
     /*
     assume y, cb, cr have the same len and panic if not
@@ -223,6 +231,7 @@ pub fn extract_rgb2ycbcr(image: &[u8], y: &mut [u8], cb: &mut [u8], cr: &mut [u8
     }
 }
 
+#[inline(always)]
 pub fn subsampling(src: &[u8], i_factor: usize, j_factor: usize, width: usize) -> Vec<u8> {
     if i_factor == 0 || j_factor == 0 {
         return Vec::new();
@@ -256,6 +265,7 @@ pub fn subsampling(src: &[u8], i_factor: usize, j_factor: usize, width: usize) -
     return dst;
 }
 
+#[inline(always)]
 pub fn inverse_discrete_cosine_transform(dst: &mut [i16; 64], src: &[i16; 64]) {
     type T = i64;
     const SHIFT: u32 = 16;
