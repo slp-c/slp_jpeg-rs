@@ -1,4 +1,10 @@
-use crate::read::{JpegDecoder, JpegDecoderError};
+use std::{
+    sync::{Arc, mpsc},
+    thread,
+    time::Instant,
+};
+
+use crate::read::{JpegDecoder, JpegDecoderError, parser::ComponentTable};
 
 pub mod algorithm;
 pub mod read;
@@ -20,55 +26,56 @@ pub(crate) const DHT: u8 = 0xC4;
 pub(crate) const SOS: u8 = 0xDA;
 pub(crate) const EOI: u8 = 0xD9;
 
-impl Image {
-    pub fn read_jpeg_from_file(path: &str) -> Result<Image, JpegDecoderError> {
-        let jpeg_file = std::fs::File::open(path)?;
-        let mut reader = std::io::BufReader::new(jpeg_file);
+pub fn read_jpeg_from_file(path: &str) -> Result<Image, JpegDecoderError> {
+    let jpeg_file = std::fs::File::open(path)?;
+    let mut reader = std::io::BufReader::new(jpeg_file);
 
-        let mut image = Image::default();
-        let mut decoder = JpegDecoder::init(&mut reader, &mut image)?;
-        // after JpegDecoder::init ALL pub fn in the decoder is available to call!
+    let mut image = Image::default();
+    let mut decoder = JpegDecoder::init(&mut reader, &mut image)?;
+    // after JpegDecoder::init ALL pub fn in the decoder is available to call!
 
-        image.pixels = vec![
+    image.pixels = vec![
                 0; // the formula is height * bytes_per_row. Some might refer bytes_per_row as row_strides or pitch
                 image.height as usize
                     * (image.width as usize * image.channels as usize * image.bit_depth as usize)
                         .div_ceil(8) // this is redundant for baseline jpeg but it's just a universal way to do it so we keep it anyway
             ];
 
-        /*
-        decoder.decode_next_block will do Huffman + RLE decoding, it will return Err() on error and Ok() on success
-        if return Ok() it'll be Ok(Some(block)) if there's still some block to decode
-        and return Ok(None) if there's no more to decode
-        it was design to use with the while let as you see below
-        */
+    /*
+    decoder.decode_next_block will do Huffman + RLE decoding, it will return Err() on error and Ok() on success
+    if return Ok() it'll be Ok(Some(block)) if there's still some block to decode
+    and return Ok(None) if there's no more to decode
+    it was design to use with the while let as you see below
+    */
+    let mut t = 0f32;
 
-        let mut temp: [i16; 64] = [0; 64];
-        while let Some(mut block) = decoder.decode_next_block(&mut reader)? {
-            algorithm::inverse_quant(decoder.get_quant_table(block.component), &mut block.data);
-            algorithm::inverse_zigzag(&mut temp, &block.data);
-            algorithm::inverse_discrete_cosine_transform(&mut block.data, &temp);
-            block.data.iter_mut().for_each(|x| *x += 128);
-            decoder.write_block(&mut image, &block);
-            // Developers should be able to define write_block by themselves if they want
-            // See struct Block in this same file
-            // This current write_block can write no conflicts
-        }
-
-        if image.channels == 3 {
-            algorithm::convert_ycbcr2rgb(&mut image.pixels);
-        }
-
-        Ok(image)
+    let mut temp: [i16; 64] = [0; 64];
+    while let Some(mut block) = decoder.decode_next_block(&mut reader)? {
+        algorithm::inverse_quant(decoder.get_quant_table(block.component), &mut block.data);
+        algorithm::inverse_zigzag(&mut temp, &block.data);
+        algorithm::inverse_discrete_cosine_transform(&mut block.data, &temp);
+        block.data.iter_mut().for_each(|x| *x += 128);
+        let start = Instant::now();
+        decoder.write_block(&mut image, &block);
+        t += start.elapsed().as_secs_f32();
+        // Developers should be able to define write_block by themselves if they want
+        // See struct Block in this same file
+        // This current write_block can write no conflicts
     }
+
+    if image.channels == 3 {
+        algorithm::convert_ycbcr2rgb(&mut image.pixels);
+    }
+
+    println!("{t}");
+
+    Ok(image)
 }
 
+#[repr(align(64))]
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub struct Block<T>
-where
-    T: Clone + Copy + From<u8>,
-{
-    pub data: [T; 64],
+pub struct Block {
+    pub data: [i16; 64],
     pub mcu: usize,
     pub component: u8, // 0, 1, 2
     pub v: u8,
@@ -109,4 +116,164 @@ where
     For component that have less/equal/greater sampling factor
     than/as/than prime component we sacle/keep/scale the block size up//down.
     */
+}
+
+#[derive(Debug, Clone)]
+struct ProcessBlockArgs {
+    pixels: *mut u8,
+    height: u16,
+    width: u16,
+    channels: u8,
+
+    component_table: [ComponentTable; 3],
+    quant_table: [Vec<i16>; 4],
+    prime_component: usize,
+}
+unsafe impl Send for ProcessBlockArgs {}
+unsafe impl Sync for ProcessBlockArgs {}
+
+pub fn read_jpeg_from_file_fast(path: &str) -> Result<Image, JpegDecoderError> {
+    let jpeg_file = std::fs::read(path)?;
+    let mut reader = std::io::Cursor::new(jpeg_file.as_slice());
+
+    let mut image = Image::default();
+    let mut decoder = JpegDecoder::init(&mut reader, &mut image)?;
+
+    image.pixels =
+        vec![
+            0;
+            image.height as usize
+                * (image.width as usize * image.channels as usize * image.bit_depth as usize)
+                    .div_ceil(8)
+        ];
+
+    {
+        let args = Arc::new(ProcessBlockArgs {
+            pixels: image.pixels.as_mut_ptr(),
+            height: image.height,
+            width: image.width,
+            channels: image.channels,
+
+            component_table: decoder.clone_component_table(),
+            quant_table: decoder.clone_quant_table(),
+            prime_component: decoder.get_prime_component() as usize,
+        });
+
+        let mut senders = Vec::new();
+
+        // somehow this is the only value that run faster
+        const WORKER_COUNT: usize = 2;
+        const CHANNEL: usize = 128 / WORKER_COUNT;
+
+        for _ in 0..WORKER_COUNT {
+            let (tx, rx) = mpsc::sync_channel::<Block>(CHANNEL);
+            senders.push(tx);
+
+            let args = args.clone();
+            thread::spawn(move || {
+                let (ty, ry) = mpsc::sync_channel::<Block>(CHANNEL);
+                {
+                    let args = args.clone();
+                    thread::spawn(move || {
+                        while let Ok(block) = ry.recv() {
+                            write_block(&args, &block);
+                        }
+                    });
+                }
+
+                while let Ok(mut block) = rx.recv() {
+                    let quant_table: &[i16; 64] = &args.quant_table
+                        [args.component_table[block.component as usize].quant_id as usize]
+                        [0..64]
+                        .try_into()
+                        .unwrap();
+                    let mut temp: [i16; 64] = [0; 64];
+
+                    algorithm::inverse_quant(quant_table, &mut block.data);
+                    algorithm::inverse_zigzag(&mut temp, &block.data);
+                    algorithm::inverse_discrete_cosine_transform(&mut block.data, &temp);
+                    block.data.iter_mut().for_each(|x| *x += 128);
+
+                    if ty.send(block).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+
+        // 0.07
+        while let Some(block) = decoder.decode_next_block(&mut reader)? {
+            if senders[(block.mcu as usize) % WORKER_COUNT]
+                .send(block)
+                .is_err()
+            {
+                return Err(JpegDecoderError::StateError);
+            }
+        }
+    }
+
+    if image.channels == 3 {
+        let pixels = image.pixels.len() / 3;
+        let mut buf = &mut image.pixels[..];
+
+        let p = match thread::available_parallelism() {
+            Err(_) => 1,
+            Ok(v) => v.get(),
+        };
+        let pix_per_thr = pixels / p;
+
+        thread::scope(|s| {
+            for _ in 0..p {
+                let (cur, left) = buf.split_at_mut(pix_per_thr * 3);
+                buf = left;
+
+                s.spawn(|| algorithm::convert_ycbcr2rgb(cur));
+            }
+            algorithm::convert_ycbcr2rgb(buf);
+        });
+    }
+
+    Ok(image)
+}
+
+#[inline(always)]
+fn write_block(arg: &ProcessBlockArgs, block: &Block) {
+    let component = block.component as usize;
+    let p = block.mcu as usize;
+    let bpp: usize = arg.channels as usize;
+    let bpr: usize = arg.width as usize * bpp;
+
+    let i_factor = arg.component_table[component].i_factor;
+    let j_factor = arg.component_table[component].j_factor;
+
+    let block_height =
+        8 * arg.component_table[arg.prime_component].vertical_sampling_factor as usize;
+    let block_width =
+        8 * arg.component_table[arg.prime_component].horizontal_sampling_factor as usize;
+
+    let block_per_row = (arg.width as usize).div_ceil(block_width);
+
+    let row = (p / block_per_row) * block_height + (block.v as usize) * 8 * i_factor;
+    let col = (p % block_per_row) * block_width + (block.h as usize) * 8 * j_factor;
+
+    let mut i: usize = 0;
+    while i < 8 * i_factor && row + i < arg.height as usize {
+        let mut j: usize = 0;
+        while j < 8 * j_factor && col + j < arg.width as usize {
+            let scaled_i = i / i_factor;
+            let scaled_j = j / j_factor;
+
+            let block_index = scaled_i * 8 + scaled_j;
+            let pixel_index = (row + i) * bpr + (col + j) * bpp + component;
+
+            unsafe {
+                arg.pixels
+                    .add(pixel_index)
+                    .write(block.data[block_index].clamp(0, 0xFF) as u8);
+            };
+
+            j += 1;
+        }
+        i += 1;
+    }
 }
