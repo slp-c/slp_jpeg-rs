@@ -2,7 +2,6 @@ use std::{
     collections::VecDeque,
     sync::{Arc, mpsc},
     thread,
-    time::Instant,
 };
 
 use crate::read::{JpegDecoder, JpegDecoderError, parser::ComponentTable};
@@ -47,7 +46,6 @@ pub fn read_jpeg_from_file(path: &str) -> Result<Image, JpegDecoderError> {
     and return Ok(None) if there's no more to decode
     it was design to use with the while let as you see below
     */
-    let mut t = 0f32;
 
     let mut temp: [i16; 64] = [0; 64];
     while let Some(mut block) = decoder.decode_next_block(&mut reader)? {
@@ -55,9 +53,7 @@ pub fn read_jpeg_from_file(path: &str) -> Result<Image, JpegDecoderError> {
         algorithm::inverse_zigzag(&mut temp, &block.data);
         algorithm::inverse_discrete_cosine_transform(&mut block.data, &temp);
         block.data.iter_mut().for_each(|x| *x += 128);
-        let start = Instant::now();
         decoder.write_block(&mut image, &block);
-        t += start.elapsed().as_secs_f32();
         // Developers should be able to define write_block by themselves if they want
         // See struct Block in this same file
         // This current write_block can write no conflicts
@@ -66,8 +62,6 @@ pub fn read_jpeg_from_file(path: &str) -> Result<Image, JpegDecoderError> {
     if image.channels == 3 {
         algorithm::convert_ycbcr2rgb(&mut image.pixels);
     }
-
-    println!("{t}");
 
     Ok(image)
 }
@@ -213,7 +207,7 @@ pub fn read_jpeg_from_file_fast(path: &str) -> Result<Image, JpegDecoderError> {
         }
 
         let mut cur_worker = 0;
-        let mut blocks: VecDeque<Block> = VecDeque::new();
+        let mut blocks: VecDeque<Block> = VecDeque::with_capacity(blocks_per_row * 3);
 
         while let Some(block) = decoder.decode_next_block(&mut reader)? {
             if block.mcu % blocks_per_row == 0 {
