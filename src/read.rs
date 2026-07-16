@@ -33,6 +33,7 @@ pub struct JpegDecoderState {
 }
 
 impl JpegDecoder {
+    #[inline]
     pub fn init<R: io::Read + io::Seek>(
         reader: &mut R,
         image: &mut Image,
@@ -47,6 +48,7 @@ impl JpegDecoder {
         Ok(s)
     }
 
+    #[inline]
     pub fn decode_next_block<R: io::Read + io::Seek>(
         &mut self,
         reader: &mut R,
@@ -102,6 +104,7 @@ impl JpegDecoder {
         self.parser.prime_component
     }
 
+    #[inline(always)]
     fn update_state<R: io::Read + io::Seek>(
         &mut self,
         reader: &mut R,
