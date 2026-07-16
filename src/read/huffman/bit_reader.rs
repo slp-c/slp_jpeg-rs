@@ -13,6 +13,7 @@ pub struct BitReader {
 }
 
 impl BitReader {
+    #[inline(always)]
     pub fn new<R: io::Read + io::Seek>(reader: &mut R) -> Result<Self, BitReaderError> {
         let mut v = Self {
             buf: 0,
@@ -26,6 +27,7 @@ impl BitReader {
     }
 
     // consume bits from buf and return the value
+    #[inline(always)]
     pub fn read_bits<R: io::Read + io::Seek>(
         &mut self,
         reader: &mut R,
@@ -48,6 +50,7 @@ impl BitReader {
     }
 
     // consume bits from head and push to buf
+    #[inline(always)]
     fn pull_head(&mut self, bits: u8) -> Result<(), BitReaderError> {
         self.buf = self.buf.unbounded_shl(bits as u32);
 
@@ -64,6 +67,7 @@ impl BitReader {
     }
 
     // overwrite head with the next byte from file
+    #[inline(always)]
     fn fetch_head<R: io::Read + io::Seek>(&mut self, reader: &mut R) -> Result<(), BitReaderError> {
         let mut buf: [u8; 1] = [0];
         self.read(reader, &mut buf)?;
@@ -83,7 +87,7 @@ impl BitReader {
         Ok(())
     }
 
-    // we probably don't wanna call the reader directly
+    #[inline(always)]
     fn read<R: io::Read>(&mut self, reader: &mut R, buf: &mut [u8]) -> Result<(), BitReaderError> {
         match reader
             .read_exact(buf)
@@ -102,6 +106,7 @@ impl BitReader {
         }
     }
 
+    #[inline(always)]
     fn seek<R: io::Read + io::Seek>(
         &mut self,
         reader: &mut R,

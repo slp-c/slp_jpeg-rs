@@ -25,6 +25,7 @@ impl HuffmanDecoder {
     }
 
     // read_huffman will not consume any bits
+    #[inline(always)]
     fn read_huffman(
         &self,
         huffman_table: &[HuffmanSymbol; 65536],
@@ -34,7 +35,7 @@ impl HuffmanDecoder {
 
         while code_len < 16 {
             code <<= 1;
-            code |= ((self.reader.buf << code_len) & 0x8000) >> 15;
+            code |= (self.reader.buf << code_len) >> (size_of_val(&self.reader.buf) * 8 - 1);
             code_len += 1;
 
             if code_len == huffman_table[code as usize].code_len {
