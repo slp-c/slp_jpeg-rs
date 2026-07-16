@@ -52,6 +52,10 @@ pub struct CheckList {
 }
 
 impl JpegParser {
+    pub fn clone_quant_table(&self) -> [Vec<i16>; 4] {
+        self.quant_table.clone()
+    }
+
     pub fn get_quant_table(&self, component: u8) -> &[i16; 64] {
         self.quant_table[self.component_table[component as usize].quant_id as usize][0..64]
             .try_into()
@@ -68,6 +72,10 @@ impl JpegParser {
         );
 
         [huffman_table_dc, huffman_table_ac]
+    }
+
+    pub fn clone_component_table(&self) -> [ComponentTable; 3] {
+        self.component_table.clone()
     }
 
     pub fn get_component_table(&self, component: u8) -> ComponentTable {
@@ -601,154 +609,3 @@ impl Default for JpegParser {
         }
     }
 }
-
-/*
-    fn sos_parse<T: io::Read + io::Seek>(
-        &mut self,
-        reader: &mut T,
-        header: &mut JpegParser,
-    ) -> Result<Option<()>, JpegDecoderError> {
-        let (mut marker_type, mut marker_len): (u8, u16) = self.get_marker(reader)?;
-
-        while marker_type != SOS {
-            match marker_type {
-                DHT => header.dht_parse(reader, marker_len)?,
-                DQT => header.dqt_parse(reader, marker_len)?,
-                EOI => return Ok(None),
-                _ => return Err(JpegDecoderError::MarkerInvalid),
-            }
-
-            (marker_type, marker_len) = self.get_marker(reader)?;
-        }
-
-        marker_len -= 2;
-
-        let component_count: usize = {
-            let mut buf: [u8; 1] = [0];
-            self.read(reader, &mut buf)?;
-
-            marker_len = marker_len
-                .checked_sub(buf.len() as u16)
-                .ok_or(JpegDecoderError::MarkerInvalid)?;
-
-            Ok::<usize, JpegDecoderError>(match buf[0] {
-                1 | 3 => buf[0] as usize,
-                _ => return Err(JpegDecoderError::MarkerInvalid),
-            })
-        }?;
-
-        if component_count == 1 {
-            let mut buf: [u8; 2] = [0; 2];
-            self.read(reader, &mut buf)?;
-
-            marker_len = marker_len
-                .checked_sub(buf.len() as u16)
-                .ok_or(JpegDecoderError::MarkerInvalid)?;
-
-            let mut comp: Option<u8> = None;
-            for j in 0..header.component_table.len() {
-                if buf[0] == header.component_table[j].component_id {
-                    comp = Some(j as u8);
-                    break;
-                }
-            }
-            if comp == None {
-                return Err(JpegDecoderError::MarkerInvalid);
-            }
-            let comp = comp.unwrap();
-
-            // [DC, AC]
-            header.component_table[comp as usize].huffman_id =
-                [(buf[1] >> 4) & 0x0F, (buf[1] >> 0) & 0x0F];
-
-            *self = JpegDecoderState {
-                mcu: 0,
-                max_comp: comp + 1,
-                comp: comp,
-                min_comp: comp,
-                h: 0,
-                v: 0,
-            };
-        } else {
-            if *self != JpegDecoderState::default() {
-                return Err(JpegDecoderError::MarkerInvalid);
-            }
-
-            for i in 0..component_count {
-                let mut buf: [u8; 2] = [0; 2];
-                self.read(reader, &mut buf)?;
-
-                marker_len = marker_len
-                    .checked_sub(buf.len() as u16)
-                    .ok_or(JpegDecoderError::MarkerInvalid)?;
-
-                if buf[0] as usize != i + 1 {
-                    return Err(JpegDecoderError::MarkerInvalid);
-                }
-
-                // [DC, AC]
-                header.component_table[i].huffman_id = [(buf[1] >> 4) & 0x0F, (buf[1] >> 0) & 0x0F];
-            }
-
-            *self = JpegDecoderState {
-                mcu: 0,
-                max_comp: component_count as u8,
-                comp: 0,
-                min_comp: 0,
-                h: 0,
-                v: 0,
-            };
-        }
-
-        {
-            let mut buf: [u8; 3] = [0; 3];
-            self.read(reader, &mut buf)?;
-
-            marker_len = marker_len
-                .checked_sub(buf.len() as u16)
-                .ok_or(JpegDecoderError::MarkerInvalid)?;
-
-            if buf != [0x00, 0x3F, 0x00] {
-                return Err(JpegDecoderError::MarkerInvalid);
-            }
-        }
-
-        if marker_len != 0 {
-            return Err(JpegDecoderError::MarkerInvalid);
-        }
-
-        Ok(Some(()))
-    }
-
-    fn read<T: io::Read + io::Seek>(
-        &mut self,
-        reader: &mut T,
-        buf: &mut [u8],
-    ) -> Result<(), JpegDecoderError> {
-        reader
-            .read_exact(buf)
-            .map_err(|e| JpegDecoderError::ReadFail(e.kind()))
-    }
-
-    fn get_marker<T: io::Read + io::Seek>(
-        &mut self,
-        reader: &mut T,
-    ) -> Result<(u8, u16), JpegDecoderError> {
-        let mut buf: [u8; 4] = [0; 4];
-
-        self.read(reader, &mut buf[0..1])?;
-        if buf[0] != 0xFF {
-            while buf[0] != 0xFF {
-                self.read(reader, &mut buf[0..1])?;
-            }
-            //return Err(JpegDecoderError::MarkerInvalid);
-        }
-
-        self.read(reader, &mut buf[1..2])?;
-        if buf[1] != EOI {
-            self.read(reader, &mut buf[2..4])?;
-        }
-
-        Ok((buf[1], u16::from_be_bytes(buf[2..4].try_into().unwrap())))
-    }
-*/
