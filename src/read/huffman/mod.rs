@@ -45,15 +45,14 @@ impl HuffmanDecoder {
         Err(HuffmanDecoderError::UnknownSymbol)
     }
 
-    pub fn decode<T, R>(
+    pub fn decode<R>(
         &mut self,
         reader: &mut R,
         huffman_table: [&[HuffmanSymbol; 65536]; 2], // [DC, AC]
         component: u8, // which component are we decoding? this is required for previous_dc to work
-        dest: &mut [T],
+        dest: &mut [i16],
     ) -> Result<(), HuffmanDecoderError>
     where
-        T: From<i16>,
         R: io::Read + io::Seek,
     {
         let symbol: HuffmanSymbol = self.read_huffman(huffman_table[0])?;
@@ -81,7 +80,7 @@ impl HuffmanDecoder {
 
         let dc: i16 = self.previous_dc[component as usize].wrapping_add(dc_diff);
         self.previous_dc[component as usize] = dc;
-        dest[0] = dc.into();
+        dest[0] = dc;
 
         // decode block[1..64] with AC table
         let mut i: usize = 1;
@@ -119,7 +118,7 @@ impl HuffmanDecoder {
                     v += vt;
                 }
 
-                (v as i16).into()
+                v as i16
             };
 
             i += 1;
