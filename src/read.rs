@@ -1,4 +1,4 @@
-use std::{cmp, io};
+use std::io;
 
 use crate::{
     Block, EOI, Image, SOS,
@@ -9,7 +9,7 @@ use crate::{
 };
 
 mod huffman;
-mod parser;
+pub mod parser;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub struct JpegDecoder {
@@ -50,7 +50,7 @@ impl JpegDecoder {
     pub fn decode_next_block<R: io::Read + io::Seek>(
         &mut self,
         reader: &mut R,
-    ) -> Result<Option<Block<i16>>, JpegDecoderError> {
+    ) -> Result<Option<Block>, JpegDecoderError> {
         /*
         this function will return Err() on actuall Error
         return Ok(None) when there's no other block to decode next
@@ -64,7 +64,7 @@ impl JpegDecoder {
 
         let (mcu, component, v, h) = self.update_state(reader)?;
 
-        let mut block = Block::<i16> {
+        let mut block = Block {
             data: [0; 64],
             mcu,
             component,
@@ -82,8 +82,16 @@ impl JpegDecoder {
         Ok(Some(block))
     }
 
+    pub fn clone_quant_table(&self) -> [Vec<i16>; 4] {
+        self.parser.clone_quant_table()
+    }
+
     pub fn get_quant_table(&self, component: u8) -> &[i16; 64] {
         self.parser.get_quant_table(component)
+    }
+
+    pub fn clone_component_table(&self) -> [ComponentTable; 3] {
+        self.parser.clone_component_table()
     }
 
     pub fn get_component_table(&self, component: u8) -> ComponentTable {
@@ -171,10 +179,7 @@ impl JpegDecoder {
 impl JpegDecoder {
     // write an 8x8 block
     // this will clamp(0, 255) Block's data
-    pub fn write_block<T>(&self, image: &mut Image, block: &Block<T>)
-    where
-        T: Clone + Copy + From<u8> + cmp::Ord + TryInto<u8>,
-    {
+    pub fn write_block(&self, image: &mut Image, block: &Block) {
         let component = block.component as usize;
         let p = block.mcu as usize;
         let bpp: usize = image.channels as usize;
@@ -189,10 +194,17 @@ impl JpegDecoder {
         let i_factor = self.get_component_table(component as u8).i_factor;
         let j_factor = self.get_component_table(component as u8).j_factor;
 
-        let row = (p / self.parser.mcu.mcu_per_row) * self.parser.mcu.mcu_height
-            + (block.v as usize) * 8 * i_factor;
-        let col = (p % self.parser.mcu.mcu_per_row) * self.parser.mcu.mcu_width
-            + (block.h as usize) * 8 * j_factor;
+        let block_height = 8 * self
+            .get_component_table(self.get_prime_component())
+            .vertical_sampling_factor as usize;
+        let block_width = 8 * self
+            .get_component_table(self.get_prime_component())
+            .horizontal_sampling_factor as usize;
+
+        let block_per_row = (image.width as usize).div_ceil(block_width);
+
+        let row = (p / block_per_row) * block_height + (block.v as usize) * 8 * i_factor;
+        let col = (p % block_per_row) * block_width + (block.h as usize) * 8 * j_factor;
 
         let mut i: usize = 0;
         while i < 8 * i_factor && row + i < image.height as usize {
@@ -204,13 +216,8 @@ impl JpegDecoder {
                 let block_index = scaled_i * 8 + scaled_j;
                 let pixel_index = (row + i) * bpr + (col + j) * bpp + component;
 
-                image.pixels[pixel_index] = match block.data[block_index]
-                    .clamp(0.into(), 0xFF.into())
-                    .try_into()
-                {
-                    Ok(x) => x,
-                    Err(_) => panic!(), // this will never happen because the value is clamped
-                };
+                image.pixels[pixel_index] =
+                    block.data[block_index].clamp(0, 0xFF).try_into().unwrap();
 
                 j += 1;
             }
@@ -262,13 +269,10 @@ impl From<io::Error> for JpegDecoderError {
     }
 }
 
-impl<T> Default for Block<T>
-where
-    T: Clone + Copy + From<u8>,
-{
+impl Default for Block {
     fn default() -> Self {
         Self {
-            data: [0.into(); 64],
+            data: [0; 64],
             mcu: 0,
             component: 0,
             v: 0,
