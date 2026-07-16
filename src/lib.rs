@@ -8,7 +8,6 @@ use crate::read::{JpegDecoder, JpegDecoderError, parser::ComponentTable};
 
 pub mod algorithm;
 pub mod read;
-pub mod write;
 
 #[derive(Debug, Default, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Image {
