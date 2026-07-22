@@ -80,36 +80,38 @@ pub struct Block {
     Size of an mcu block is chosen to be the same size as
     the prime_component (decoder.get_prime_component()).
 
-    The prime_component is the one decoder choose so other component will scale into it
-    But of course you can choose otherwise,
-    developers can define there own write_block function.
+    The prime_component is the one decoder choose so other components will scale into it
+    But of course you can choose otherwise.
     You can read our write_block function in read.rs to see
     how we calculate the block position to write.
 
-    component will tell you each component this block have.
+    component.
     we define:
     component: 0 -> Y
     compoennt: 1 -> Cb
     component: 2 -> Cr
-    this allow we to use them as index
+    this allow we to use them as index into the image
 
     v and h
     For example component 0 (Y)
     This component have
     - vertical sampling factor = 2
     - horizontal sampling factor = 2
-    So a full component Y is a 2x2 block!
+    So a full component Y is a 2x2 block
     1 component Y is 4 blocks follow this order
     Using a[v][h] we got
     [a00, a01, a10, a11],
-    Each component like this will be on the image as a whole 16x16 block! (assume Y is the prime_component)
+    Each component like this will be on the image as a whole 16x16 block (assume Y is the prime_component)
 
-    So in order to write we need to know, which mcu are we writting,
-    then which block in that mcu we're writting
-    For component that have less/equal/greater sampling factor
+    So in order to write, we need to know
+    which mcu are we writting,
+    which block in that mcu we're writting
+    for component that have less/equal/greater sampling factor
     than/as/than prime component we sacle/keep/scale the block size up//down.
     */
 }
+
+// example of fast read_jpeg_from_file
 
 #[derive(Debug, Clone)]
 struct ProcessBlockArgs {
